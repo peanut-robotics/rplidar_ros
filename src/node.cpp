@@ -200,7 +200,13 @@ int main(int argc, char * argv[]) {
     std::string scan_mode;
     ros::NodeHandle nh;
     ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1000);
+
     ros::Publisher status_pub = nh.advertise<peanut_common::HardwareStatus>("rplidar_status", 1000, true);
+    peanut_common::HardwareStatus msg;
+    msg.status = peanut_common::HardwareStatus::STATUS_DISCONNECTED;
+    msg.status_msg = "Error, No RPLIDAR device initialized yet";
+    status_pub.publish(msg);
+
     ros::NodeHandle nh_private("~");
     nh_private.param<std::string>("channel_type", channel_type, "serial");
     nh_private.param<std::string>("tcp_ip", tcp_ip, "192.168.0.7"); 
