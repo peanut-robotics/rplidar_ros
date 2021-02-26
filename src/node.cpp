@@ -137,7 +137,7 @@ bool checkRPLIDARHealth(RPlidarDriver * drv)
     u_result     op_result;
     rplidar_response_device_health_t healthinfo;
     op_result = drv->getHealth(healthinfo);
-    if (IS_OK(op_result)) { 
+    if (IS_OK(op_result)) {
         ROS_INFO("RPLidar health status : %d", healthinfo.status);
         if (healthinfo.status == RPLIDAR_STATUS_ERROR) {
             ROS_ERROR("Error, rplidar internal error detected. Please reboot the device to retry.");
@@ -172,7 +172,7 @@ bool start_motor(std_srvs::Empty::Request &req,
   {
       ROS_DEBUG("Start motor");
       u_result ans=drv->startMotor();
-  
+
       ans=drv->startScan(0,1);
    }
    else ROS_INFO("lost connection");
@@ -186,7 +186,7 @@ static float getAngle(const rplidar_response_measurement_node_hq_t& node)
 
 int main(int argc, char * argv[]) {
     ros::init(argc, argv, "rplidar_node");
-    
+
     std::string channel_type;
     std::string tcp_ip;
     std::string serial_port;
@@ -203,9 +203,9 @@ int main(int argc, char * argv[]) {
     ros::Publisher status_pub = nh.advertise<peanut_common::HardwareStatus>("rplidar_status", 1000, true);
     ros::NodeHandle nh_private("~");
     nh_private.param<std::string>("channel_type", channel_type, "serial");
-    nh_private.param<std::string>("tcp_ip", tcp_ip, "192.168.0.7"); 
+    nh_private.param<std::string>("tcp_ip", tcp_ip, "192.168.0.7");
     nh_private.param<int>("tcp_port", tcp_port, 20108);
-    nh_private.param<std::string>("serial_port", serial_port, "/dev/ttyUSB0"); 
+    nh_private.param<std::string>("serial_port", serial_port, "/dev/ttyUSB0");
     nh_private.param<int>("serial_baudrate", serial_baudrate, 115200/*256000*/);//ros run for A1 A2, change to 256000 if A3
     nh_private.param<std::string>("frame_id", frame_id, "laser_frame");
     nh_private.param<bool>("inverted", inverted, false);
@@ -224,7 +224,7 @@ int main(int argc, char * argv[]) {
         drv = RPlidarDriver::CreateDriver(rp::standalone::rplidar::DRIVER_TYPE_SERIALPORT);
     }
 
-    
+
     if (!drv) {
         ROS_ERROR("Create Driver fail, exit");
         return -2;
@@ -246,7 +246,7 @@ int main(int argc, char * argv[]) {
             return -1;
         }
     }
-    
+
     // get rplidar device info
     if (!getRPLIDARDeviceInfo(drv)) {
         return -1;
@@ -301,7 +301,7 @@ int main(int argc, char * argv[]) {
     {
         //default frequent is 10 hz (by motor pwm value),  current_scan_mode.us_per_sample is the number of scan point per us
         angle_compensate_multiple = (int)(1000*1000/current_scan_mode.us_per_sample/10.0/360.0);
-        if(angle_compensate_multiple < 1) 
+        if(angle_compensate_multiple < 1)
           angle_compensate_multiple = 1;
         max_distance = current_scan_mode.max_distance;
         ROS_INFO("current scan mode: %s, max_distance: %.1f m, Point number: %.1fK , angle_compensate: %d",  current_scan_mode.scan_mode,
@@ -315,6 +315,12 @@ int main(int argc, char * argv[]) {
     ros::Time start_scan_time;
     ros::Time end_scan_time;
     double scan_duration;
+
+    peanut_common::HardwareStatus::_status_type last_publish_status = peanut_common::HardwareStatus::STATUS_READY;
+    ros::Time last_publish_time = ros::Time::now();
+
+    static const double MSG_THROTTLE = 0.1;
+
     while (ros::ok()) {
         rplidar_response_measurement_node_hq_t nodes[360*8];
         size_t   count = _countof(nodes);
@@ -324,20 +330,22 @@ int main(int argc, char * argv[]) {
         end_scan_time = ros::Time::now();
         scan_duration = (end_scan_time - start_scan_time).toSec();
 
-
         // Throttle Set async
-        
+        peanut_common::HardwareStatus msg;
         if (!checkRPLIDARHealth(drv)) {
-            peanut_common::HardwareStatus msg;
             msg.status = peanut_common::HardwareStatus::STATUS_DISCONNECTED;
             msg.status_msg = "Error Undefined";
-            status_pub.publish(msg);
         }
         else{
-            peanut_common::HardwareStatus msg;
             msg.status = peanut_common::HardwareStatus::STATUS_READY;
             msg.status_msg = "Status OK";
+        }
+
+        ros::Time now = ros::Time::now();
+        if (msg.status != last_publish_status || (now - last_publish_time).toSec() > MSG_THROTTLE) {
             status_pub.publish(msg);
+            last_publish_status = msg.status;
+            last_publish_time = now;
         }
 
         if (op_result == RESULT_OK) {
@@ -367,7 +375,7 @@ int main(int argc, char * argv[]) {
                             }
                         }
                     }
-  
+
                     publish_scan(&scan_pub, angle_compensate_nodes, angle_compensate_nodes_count,
                              start_scan_time, scan_duration, inverted,
                              angle_min, angle_max, max_distance,
@@ -402,7 +410,7 @@ int main(int argc, char * argv[]) {
         }
 
         ros::spinOnce();
-        
+
     }
 
     // done!
