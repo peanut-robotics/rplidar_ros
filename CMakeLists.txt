@@ -13,7 +13,9 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rosconsole
   sensor_msgs
+  peanut_common
 )
+
 
 include_directories(
   ${RPLIDAR_SDK_PATH}/include
@@ -21,9 +23,17 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-catkin_package()
+catkin_package(
+  CATKIN_DEPENDS
+  peanut_common
+)
 
 add_executable(rplidarNode src/node.cpp ${RPLIDAR_SDK_SRC})
+add_dependencies(rplidarNode
+                 ${${PROJECT_NAME}_EXPORTED_TARGETS}
+                 ${catkin_EXPORTED_TARGETS}
+                 ${serial_EXPORTED_TARGETS}
+                 )
 target_link_libraries(rplidarNode ${catkin_LIBRARIES})
 
 add_executable(rplidarNodeClient src/client.cpp)
