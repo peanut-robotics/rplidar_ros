@@ -37,6 +37,7 @@
 #include "std_srvs/Empty.h"
 #include "rplidar.h"
 #include "std_msgs/String.h"
+#include "peanut_common/HardwareStatus.h"
 
 #ifndef _countof
 #define _countof(_Array) (int)(sizeof(_Array) / sizeof(_Array[0]))
@@ -140,15 +141,6 @@ bool checkRPLIDARHealth(RPlidarDriver * drv)
         ROS_INFO("RPLidar health status : %d", healthinfo.status);
         if (healthinfo.status == RPLIDAR_STATUS_ERROR) {
             ROS_ERROR("Error, rplidar internal error detected. Please reboot the device to retry.");
-            ros::Publisher chatter_pub = nh.advertise<std_msgs::String>("rplidar_missoncontrol_health", 1000);
-            ros::Rate loop_rate(10);
-            std_msgs::String msg;
-            std::stringstream ss;
-            ss << "ERROR, Health Check";
-            msg.data = ss.str();
-            chatter_pub.publish(msg);
-            ros::spinOnce();
-            loop_rate.sleep();
             return false;
         } else {
             return true;
@@ -156,15 +148,6 @@ bool checkRPLIDARHealth(RPlidarDriver * drv)
 
     } else {
         ROS_ERROR("Error, cannot retrieve rplidar health code: %x", op_result);
-        ros::Publisher chatter_pub = nh.advertise<std_msgs::String>("rplidar_missoncontrol_health", 1000);
-        ros::Rate loop_rate(10);
-        std_msgs::String msg;
-        std::stringstream ss;
-        ss << "ERROR, Health Check";
-        msg.data = ss.str();
-        chatter_pub.publish(msg);
-        ros::spinOnce();
-        loop_rate.sleep();
         return false;
     }
 }
@@ -217,6 +200,7 @@ int main(int argc, char * argv[]) {
     std::string scan_mode;
     ros::NodeHandle nh;
     ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1000);
+    ros::Publisher status_pub = nh.advertise<peanut_common::HardwareStatus>("rplidar_status", 1000, latch = true);
     ros::NodeHandle nh_private("~");
     nh_private.param<std::string>("channel_type", channel_type, "serial");
     nh_private.param<std::string>("tcp_ip", tcp_ip, "192.168.0.7"); 
@@ -250,35 +234,44 @@ int main(int argc, char * argv[]) {
         // make connection...
         if (IS_FAIL(drv->connect(tcp_ip.c_str(), (_u32)tcp_port))) {
             ROS_ERROR("Error, cannot bind to the specified serial port %s.",serial_port.c_str());
-            ros::Publisher chatter_pub = nh.advertise<std_msgs::String>("rplidar_missoncontrol_health", 1000);
-            ros::Rate loop_rate(10);
-            std_msgs::String msg;
-            std::stringstream ss;
-            ss << "ERROR, Connection Check";
-            msg.data = ss.str();
-            chatter_pub.publish(msg);
+            peanut_common::HardwareStatus msg;
+            msg.status = HardwareStatus.STATUS_DISCONNECTED;
+            msg.status_msg = "Error, cannot bind to the specified serial port for RPLIDAR";
+            status_pub.publish(msg);
             ros::spinOnce();
             loop_rate.sleep();
             RPlidarDriver::DisposeDriver(drv);
             return -1;
         }
-
+        else{
+            peanut_common::HardwareStatus msg;
+            msg.status = HardwareStatus.STATUS_READY;
+            msg.status_msg = "Initial Connection made";
+            status_pub.publish(msg);
+            ros::spinOnce();
+            loop_rate.sleep();
+        }
     }
     else{
        // make connection...
         if (IS_FAIL(drv->connect(serial_port.c_str(), (_u32)serial_baudrate))) {
             ROS_ERROR("Error, cannot bind to the specified serial port %s.",serial_port.c_str());
-            ros::Publisher chatter_pub = nh.advertise<std_msgs::String>("rplidar_missoncontrol_health", 1000);
-            ros::Rate loop_rate(10);
-            std_msgs::String msg;
-            std::stringstream ss;
-            ss << "ERROR, Connection Check";
-            msg.data = ss.str();
-            chatter_pub.publish(msg);
+            peanut_common::HardwareStatus msg;
+            msg.status = HardwareStatus.STATUS_DISCONNECTED;
+            msg.status_msg = "Error, cannot bind to the specified serial port for RPLIDAR";
+            status_pub.publish(msg);
             ros::spinOnce();
             loop_rate.sleep();
             RPlidarDriver::DisposeDriver(drv);
             return -1;
+        }
+        else{
+            peanut_common::HardwareStatus msg;
+            msg.status = HardwareStatus.STATUS_READY;
+            msg.status_msg = "Initial Connection made";
+            status_pub.publish(msg);
+            ros::spinOnce();
+            loop_rate.sleep();
         }
 
     }
@@ -292,6 +285,14 @@ int main(int argc, char * argv[]) {
     if (!checkRPLIDARHealth(drv)) {
         RPlidarDriver::DisposeDriver(drv);
         return -1;
+    }
+    else{
+        peanut_common::HardwareStatus msg;
+        msg.status = HardwareStatus.STATUS_READY;
+        msg.status_msg = "RPLIDAR Ready";
+        status_pub.publish(msg);
+        ros::spinOnce();
+        loop_rate.sleep();
     }
 
     ros::ServiceServer stop_motor_service = nh.advertiseService("stop_motor", stop_motor);
@@ -354,6 +355,19 @@ int main(int argc, char * argv[]) {
         op_result = drv->grabScanDataHq(nodes, count);
         end_scan_time = ros::Time::now();
         scan_duration = (end_scan_time - start_scan_time).toSec();
+
+        if (!checkRPLIDARHealth(drv)) {
+            peanut_common::HardwareStatus msg;
+            msg.status = HardwareStatus.STATUS_DISCONNECTED;
+            msg.status_msg = "Error Undefined";
+            status_pub.publish(msg);
+        }
+        else{
+            peanut_common::HardwareStatus msg;
+            msg.status = HardwareStatus.STATUS_READY;
+            msg.status_msg = "Status OK";
+            status_pub.publish(msg);
+        }
 
         if (op_result == RESULT_OK) {
             op_result = drv->ascendScanData(nodes, count);
