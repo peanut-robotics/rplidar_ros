@@ -200,13 +200,7 @@ int main(int argc, char * argv[]) {
     std::string scan_mode;
     ros::NodeHandle nh;
     ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1000);
-
     ros::Publisher status_pub = nh.advertise<peanut_common::HardwareStatus>("rplidar_status", 1000, true);
-    peanut_common::HardwareStatus msg;
-    msg.status = peanut_common::HardwareStatus::STATUS_DISCONNECTED;
-    msg.status_msg = "Error, No RPLIDAR device initialized yet";
-    status_pub.publish(msg);
-
     ros::NodeHandle nh_private("~");
     nh_private.param<std::string>("channel_type", channel_type, "serial");
     nh_private.param<std::string>("tcp_ip", tcp_ip, "192.168.0.7"); 
@@ -240,36 +234,16 @@ int main(int argc, char * argv[]) {
         // make connection...
         if (IS_FAIL(drv->connect(tcp_ip.c_str(), (_u32)tcp_port))) {
             ROS_ERROR("Error, cannot bind to the specified serial port %s.",serial_port.c_str());
-            peanut_common::HardwareStatus msg;
-            msg.status = peanut_common::HardwareStatus::STATUS_DISCONNECTED;
-            msg.status_msg = "Error, cannot bind to the specified serial port for RPLIDAR";
-            status_pub.publish(msg);
             RPlidarDriver::DisposeDriver(drv);
             return -1;
-        }
-        else{
-            peanut_common::HardwareStatus msg;
-            msg.status = peanut_common::HardwareStatus::STATUS_READY;
-            msg.status_msg = "Initial Connection made";
-            status_pub.publish(msg);
         }
     }
     else{
        // make connection...
         if (IS_FAIL(drv->connect(serial_port.c_str(), (_u32)serial_baudrate))) {
             ROS_ERROR("Error, cannot bind to the specified serial port %s.",serial_port.c_str());
-            peanut_common::HardwareStatus msg;
-            msg.status = peanut_common::HardwareStatus::STATUS_DISCONNECTED;
-            msg.status_msg = "Error, cannot bind to the specified serial port for RPLIDAR";
-            status_pub.publish(msg);
             RPlidarDriver::DisposeDriver(drv);
             return -1;
-        }
-        else{
-            peanut_common::HardwareStatus msg;
-            msg.status = peanut_common::HardwareStatus::STATUS_READY;
-            msg.status_msg = "Initial Connection made";
-            status_pub.publish(msg);
         }
     }
     
@@ -283,12 +257,11 @@ int main(int argc, char * argv[]) {
         RPlidarDriver::DisposeDriver(drv);
         return -1;
     }
-    else{
-        peanut_common::HardwareStatus msg;
-        msg.status = peanut_common::HardwareStatus::STATUS_READY;
-        msg.status_msg = "RPLIDAR Ready";
-        status_pub.publish(msg);
-    }
+    peanut_common::HardwareStatus msg;
+    msg.status = peanut_common::HardwareStatus::STATUS_READY;
+    msg.status_msg = "RPLIDAR Ready";
+    status_pub.publish(msg);
+
 
     ros::ServiceServer stop_motor_service = nh.advertiseService("stop_motor", stop_motor);
     ros::ServiceServer start_motor_service = nh.advertiseService("start_motor", start_motor);
@@ -351,6 +324,9 @@ int main(int argc, char * argv[]) {
         end_scan_time = ros::Time::now();
         scan_duration = (end_scan_time - start_scan_time).toSec();
 
+
+        // Throttle Set async
+        
         if (!checkRPLIDARHealth(drv)) {
             peanut_common::HardwareStatus msg;
             msg.status = peanut_common::HardwareStatus::STATUS_DISCONNECTED;
@@ -426,6 +402,7 @@ int main(int argc, char * argv[]) {
         }
 
         ros::spinOnce();
+        
     }
 
     // done!
