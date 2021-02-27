@@ -316,7 +316,6 @@ int main(int argc, char * argv[]) {
     ros::Time end_scan_time;
     double scan_duration;
 
-    peanut_common::HardwareStatus::_status_type last_publish_status = peanut_common::HardwareStatus::STATUS_READY;
     ros::Time last_publish_time = ros::Time::now();
 
     static const double MSG_THROTTLE = 0.1;
@@ -342,9 +341,8 @@ int main(int argc, char * argv[]) {
         }
 
         ros::Time now = ros::Time::now();
-        if (msg.status != last_publish_status || (now - last_publish_time).toSec() > MSG_THROTTLE) {
+        if ((now - last_publish_time).toSec() > MSG_THROTTLE) {
             status_pub.publish(msg);
-            last_publish_status = msg.status;
             last_publish_time = now;
         }
 
